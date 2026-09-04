@@ -61,6 +61,17 @@ jobs:
             libxrandr-dev \
             libxtst-dev
 
+      - name: Prepare the packaged helper resource
+        shell: bash
+        run: |
+          target_triple="$(rustc -vV | sed -n 's/^host: //p')"
+          helper="frontend/src-tauri/binaries/llama-helper-${target_triple}"
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            helper="${helper}.exe"
+          fi
+          mkdir -p frontend/src-tauri/binaries
+          : > "${helper}"
+
       - name: Check the PocketStation build
         run: cargo check --manifest-path frontend/src-tauri/Cargo.toml --locked --features pocketstation-capture --jobs 2
 
