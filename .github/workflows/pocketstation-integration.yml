@@ -1,0 +1,68 @@
+name: PocketStation integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      integration_commit:
+        description: Exact commit from this fork to verify
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pocketstation-integration-${{ inputs.integration_commit }}
+  cancel-in-progress: false
+
+jobs:
+  rust:
+    name: Rust (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu
+            runner: ubuntu-24.04
+          - name: Windows
+            runner: windows-latest
+
+    steps:
+      - name: Check commit input
+        shell: bash
+        env:
+          INTEGRATION_COMMIT: ${{ inputs.integration_commit }}
+        run: |
+          if [[ ! "${INTEGRATION_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "integration_commit must be a complete lowercase Git object ID" >&2
+            exit 2
+          fi
+
+      - name: Check out the exact commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.integration_commit }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libappindicator3-dev \
+            libasound2-dev \
+            libpipewire-0.3-dev \
+            librsvg2-dev \
+            libwebkit2gtk-4.1-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxtst-dev
+
+      - name: Check the PocketStation build
+        run: cargo check --manifest-path frontend/src-tauri/Cargo.toml --locked --features pocketstation-capture --jobs 2
+
+      - name: Test the audio conversion
+        run: cargo test --manifest-path frontend/src-tauri/Cargo.toml --locked --features pocketstation-capture --lib audio::capture::pocketstation::tests::stereo_frames_are_downmixed_before_meetily_receives_them --jobs 2
